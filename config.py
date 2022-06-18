@@ -16,7 +16,7 @@ LEGAL_BERT_EMBEDDING_COLUMN = "legalbert_embedding"
 MIN_WORDS_TO_KEEP = 5
 MAX_WORDS_TO_KEEP = 50
 
-MIN_REASON_COUNT_TO_KEEP = 30
+MIN_REASON_COUNT_TO_KEEP = 300  # 30
 
 HOME_DIR_PATH = "/home/amit/Downloads"
 ORIGINAL_EXCEL_PATH = os.path.join(HOME_DIR_PATH, "nlp_project_topic_modeling.xlsx")

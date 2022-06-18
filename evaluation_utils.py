@@ -11,4 +11,3 @@ for topic in topic_nums:
 6. search documents by topic: documents, document_scores, document_ids = model.search_documents_by_topic(topic_num=48, num_docs=5)
 """
 
-# 2.
