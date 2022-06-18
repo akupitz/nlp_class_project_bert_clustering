@@ -1,0 +1,20 @@
+* Run data_preparation.py after changing config.py to match your needs
+
+* Run a notebook for your topic modeling using your dataset (or a modification you want on it):
+import pandas as pd
+from config import OUTPUT_WITH_EMBEDDING_PICKLE_PATH, WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN, RISK_1_COLUMN, EMBEDDING_COLUMN, MIN_REASON_COUNT_TO_KEEP
+with open(OUTPUT_WITH_EMBEDDING_PICKLE_PATH, "rb") as f:
+    df = pickle.load(f)
+df = df[[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN, RISK_1_COLUMN, EMBEDDING_COLUMN]]
+
+* Evaluate using evaluation utils (not written yet)
+
+
+# todos:
+1. Write evaluation utils
+2. Try different clustering methods, at first in different notebooks (we both have
+3. Play with umap size
+# todo: עדיין יש חוסר אחידות בסוגי הסיכונים שהם תייגו אז שווה אולי לאחד ידנית על בסיס מיפוי שנעשה
+# todo: אולי שווה גם להסתכל על Risk 2 למרות שאין שם הרבה
+# todo: try "manhattan" and more hdbscan distance metrics as in hdbscan.dist_metrics.METRIC_MAPPING
+4. Optional : We can use summarization before BERT
