@@ -3,9 +3,11 @@ from typing import Union
 import pickle
 import pandas as pd
 from config import IS_ETHICAL_COLUMN, WHY_NOT_ETHICAL_TEXT_COLUMN, WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN, \
-    WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN, RISK_1_COLUMN, MIN_WORDS_TO_KEEP, MAX_WORDS_TO_KEEP, EMBEDDING_COLUMN, \
-    ORIGINAL_EXCEL_PATH, OUTPUT_WITH_EMBEDDING_PICKLE_PATH, MIN_REASON_COUNT_TO_KEEP
-from bert_embedding import get_text_embedding
+    WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN, RISK_1_COLUMN, MIN_WORDS_TO_KEEP, MAX_WORDS_TO_KEEP, \
+    DISTIL_ROBERTA_EMBEDDING_COLUMN, \
+    ORIGINAL_EXCEL_PATH, OUTPUT_WITH_EMBEDDING_PICKLE_PATH, MIN_REASON_COUNT_TO_KEEP, MPNET_EMBEDDING_COLUMN, \
+    LEGAL_BERT_EMBEDDING_COLUMN, DISTIL_ROBERTA_MODEL_NAME, MPNET_MODEL_NAME, LEGAL_BERT_MODEL_NAME
+from bert_embedding import BERTEmbedder
 
 pd.options.mode.chained_assignment = None
 
@@ -16,34 +18,22 @@ def fix_df(df: pd.DataFrame) -> pd.DataFrame:
     :param df:
     :return: Part of the dataframe that is not ethical, with a normal word count (not too many, and not too little)
     """
-    # we want only not ethical data
     df = df[~df[IS_ETHICAL_COLUMN]]
-
     df[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN] = df.apply(lambda row: clean_text(row[WHY_NOT_ETHICAL_TEXT_COLUMN]), axis=1)
-    # Create a new column corresponding to the length of each headline
     df[WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN] = df.apply(
         lambda row: len(row[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN].split()),
         axis=1)
-    # we take only real text, and not -99/Attention based on # Counter(df[df[WHY_NOT_ETHICAL_CLEAN_WORD_COUNT] == 1][WHY_NOT_ETHICAL_CLEAN_COLUMN]).most_common()
-    df = df[df[WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN] >= MIN_WORDS_TO_KEEP]
-    # len(df[df[WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN] > 100]), len(df), only a small portion of the data has more than 100 words.
-    df = df[df[WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN] <= MAX_WORDS_TO_KEEP]
-    # I checked that when Risk1 does not exist, no other risk exists, which makes na rows irrelevant
+    df = df[df[WHY_NOT_ETHICAL_CLEAN_WORD_COUNT_COLUMN].between(MIN_WORDS_TO_KEEP, MAX_WORDS_TO_KEEP)]
     df = df[~df[RISK_1_COLUMN].isna()]
     df[RISK_1_COLUMN] = df.apply(lambda row: clean_text(row[RISK_1_COLUMN], to_lower=True), axis=1)
-    # todo: עדיין יש חוסר אחידות בסוגי הסיכונים שהם תייגו אז שווה אולי לאחד ידנית על בסיס מיפוי שנעשה
-    # todo: אולי שווה גם להסתכל על Risk 2 למרות שאין שם הרבה
-
     return df
 
 
 def _leave_only_main_risks(df):
-    relevant_df = df[[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN, RISK_1_COLUMN, EMBEDDING_COLUMN]]
-    risk_reason_to_count_mapping = dict(Counter(relevant_df[RISK_1_COLUMN]))
+    risk_reason_to_count_mapping = dict(Counter(df[RISK_1_COLUMN]))
     relevant_risk_reasons = [risk_reason for risk_reason, count in risk_reason_to_count_mapping.items() if
                              count >= MIN_REASON_COUNT_TO_KEEP]
-    relevant_df = relevant_df[relevant_df[RISK_1_COLUMN].isin(
-        relevant_risk_reasons)]  # todo: maybe we can fix some of those risk reasons to be in the top reasons
+    relevant_df = df[df[RISK_1_COLUMN].isin(relevant_risk_reasons)]
     return relevant_df
 
 
@@ -68,8 +58,15 @@ def clean_text(dirty_text: Union[str, int], to_lower: bool = False) -> str:
 if __name__ == "__main__":
     topic_modeling_df = read_excel_df(ORIGINAL_EXCEL_PATH)
     topic_modeling_df = fix_df(topic_modeling_df)
-    topic_modeling_df[EMBEDDING_COLUMN] = topic_modeling_df.apply(
-        lambda row: get_text_embedding(row[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN]), axis=1)
+
+    bert_embedder = BERTEmbedder()
+    topic_modeling_df[DISTIL_ROBERTA_EMBEDDING_COLUMN] = topic_modeling_df.apply(
+        lambda row: bert_embedder.embed(row[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN], DISTIL_ROBERTA_MODEL_NAME), axis=1)
+    topic_modeling_df[LEGAL_BERT_EMBEDDING_COLUMN] = topic_modeling_df.apply(
+        lambda row: bert_embedder.embed(row[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN], LEGAL_BERT_MODEL_NAME), axis=1)
+    topic_modeling_df[MPNET_EMBEDDING_COLUMN] = topic_modeling_df.apply(
+        lambda row: bert_embedder.embed(row[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN], MPNET_MODEL_NAME), axis=1)
+
     topic_modeling_df = topic_modeling_df.reset_index(drop=True)
     with open(OUTPUT_WITH_EMBEDDING_PICKLE_PATH, "wb") as f:
         pickle.dump(topic_modeling_df, f)

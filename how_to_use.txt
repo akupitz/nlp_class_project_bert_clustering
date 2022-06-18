@@ -14,3 +14,7 @@ df = df[[WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN, RISK_1_COLUMN, EMBEDDING_COLUMN]]
 1. Write evaluation utils
 2. Try different clustering methods, at first in different notebooks (we both have
 3. Play with umap size
+# todo: עדיין יש חוסר אחידות בסוגי הסיכונים שהם תייגו אז שווה אולי לאחד ידנית על בסיס מיפוי שנעשה
+# todo: אולי שווה גם להסתכל על Risk 2 למרות שאין שם הרבה
+# todo: try "manhattan" and more hdbscan distance metrics as in hdbscan.dist_metrics.METRIC_MAPPING
+4. Optional : We can use summarization before BERT
