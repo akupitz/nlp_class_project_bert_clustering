@@ -22,4 +22,3 @@ HOME_DIR_PATH = "/home/amit/Downloads"
 ORIGINAL_EXCEL_PATH = os.path.join(HOME_DIR_PATH, "nlp_project_topic_modeling.xlsx")
 OUTPUT_WITH_EMBEDDING_PICKLE_PATH = os.path.join(HOME_DIR_PATH, "nlp_project_topic_modeling.pkl")
 OUTPUT_WITH_EMBEDDING_TSV_PATH = os.path.join(HOME_DIR_PATH, "nlp_project_topic_modeling.tsv")
-

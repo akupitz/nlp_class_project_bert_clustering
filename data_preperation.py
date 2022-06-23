@@ -70,6 +70,3 @@ if __name__ == "__main__":
     topic_modeling_df = topic_modeling_df.reset_index(drop=True)
     with open(OUTPUT_WITH_EMBEDDING_PICKLE_PATH, "wb") as f:
         pickle.dump(topic_modeling_df, f)
-    # topic_modeling_df.to_parquet(OUTPUT_WITH_EMBEDDING_PICKLE_PATH)
-    # todo: maybe remove popular words i dont want to appear in clusters
-    # todo: try spelling correction since many why not ethical texts are misspelled
