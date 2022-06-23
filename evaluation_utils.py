@@ -12,7 +12,12 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics import confusion_matrix
 from plotly.subplots import make_subplots
 from tqdm import tqdm
-from config import WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN
+from functools import partial
+from tqdm import trange
+from sklearn.metrics.cluster import normalized_mutual_info_score
+from sklearn.metrics.cluster import adjusted_rand_score
+from hyperopt import fmin, tpe, hp, STATUS_OK, space_eval, Trials
+from config import WHY_NOT_ETHICAL_CLEAN_TEXT_COLUMN, RISK_1_COLUMN
 
 sns.set()
 
@@ -219,57 +224,11 @@ def visualize_top_words_in_different_clusters(topic_word_freq):
     return fig
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-from functools import partial
-from tqdm import trange
-from sklearn.metrics.cluster import normalized_mutual_info_score
-from sklearn.metrics.cluster import adjusted_rand_score
-from hyperopt import fmin, tpe, hp, STATUS_OK, space_eval, Trials
-
 def plot_gt_clusters(embeddings, true_labels, n_neighbors=15, min_dist=0.1):
     umap_data = umap.UMAP(n_neighbors=n_neighbors,
                           n_components=2,
-                          min_dist = min_dist,
-                          #metric='cosine',
+                          min_dist=min_dist,
+                          # metric='cosine',
                           random_state=42).fit_transform(embeddings)
 
     point_size = 100.0 / np.sqrt(len(embeddings))
@@ -280,16 +239,17 @@ def plot_gt_clusters(embeddings, true_labels, n_neighbors=15, min_dist=0.1):
     fig, ax = plt.subplots(figsize=(14, 8))
     outliers = result[result.labels == -1]
     clustered = result[result.labels != -1]
-    plt.scatter(outliers.x, outliers.y, color = 'lightgrey', s=point_size)
+    plt.scatter(outliers.x, outliers.y, color='lightgrey', s=point_size)
     plt.scatter(clustered.x, clustered.y, c=clustered.labels, s=point_size, cmap='jet')
     plt.colorbar()
     plt.show()
+
 
 def generate_clusters(embeddings,
                       umap_n_neighbors,
                       umap_n_components,
                       hdbscan_min_cluster_size,
-                      random_state = None):
+                      random_state=None):
     """
     Generate HDBSCAN cluster object after reducing embedding dimensionality with UMAP
     """
@@ -300,15 +260,14 @@ def generate_clusters(embeddings,
                                  random_state=random_state)
                        .fit_transform(embeddings))
 
-    clusters = hdbscan.HDBSCAN(min_cluster_size = hdbscan_min_cluster_size,
+    clusters = hdbscan.HDBSCAN(min_cluster_size=hdbscan_min_cluster_size,
                                metric='euclidean',
                                cluster_selection_method='eom').fit(umap_embeddings)
 
     return clusters
 
 
-
-def score_clusters(embeddings, clusters, prob_threshold = 0.05):
+def score_clusters(embeddings, clusters, prob_threshold=0.05):
     """
     Returns the label count and cost of a given clustering
 
@@ -325,50 +284,10 @@ def score_clusters(embeddings, clusters, prob_threshold = 0.05):
     cluster_labels = clusters.labels_
     label_count = len(np.unique(cluster_labels))
     total_num = len(clusters.labels_)
-    cost = (np.count_nonzero(clusters.probabilities_ < prob_threshold)/total_num)
-    silhouette = silhouette_score(embeddings, cluster_labels)
+    cost = (np.count_nonzero(clusters.probabilities_ < prob_threshold) / total_num)
+    silhouette = sklearn.metrics.silhouette_score(embeddings, cluster_labels)
     return label_count, cost, silhouette
 
-def random_search(embeddings, space, num_evals):
-    """
-    Randomly search parameter space of clustering pipeline
-
-    Arguments:
-        embeddings: embeddings to use
-        space: dict, contains keys for 'n_neighbors', 'n_components',
-               and 'min_cluster_size' and values with
-               corresponding lists or ranges of parameters to search
-        num_evals: int, number of random parameter combinations to try
-
-    Returns:
-        df_result: pandas dataframe containing info on each evaluation
-                   performed, including run_id, parameters used, label
-                   count, and cost
-    """
-
-    results = []
-
-    for i in trange(num_evals):
-        n_neighbors = int(np.random.choice(space['n_neighbors']))
-        n_components = int(np.random.choice(space['n_components']))
-        min_cluster_size = int(np.random.choice(space['min_cluster_size']))
-        random_state = space['random_state']
-
-        clusters = generate_clusters(embeddings,
-                                     umap_n_neighbors=n_neighbors,
-                                     umap_n_components=n_components,
-                                     hdbscan_min_cluster_size=min_cluster_size,
-                                     random_state=random_state)
-
-        label_count, cost, silhouette = score_clusters(embeddings, clusters, prob_threshold = 0.05)
-
-        results.append([i, n_neighbors, n_components, min_cluster_size, label_count, cost, silhouette])
-
-    result_df = pd.DataFrame(results, columns=['run_id', 'n_neighbors', 'n_components',
-                                               'min_cluster_size', 'label_count', 'cost',
-                                               'silhouette'])
-
-    return result_df.sort_values(by='silhouette')
 
 def objective(params, embeddings, label_lower, label_upper):
     """
@@ -391,14 +310,14 @@ def objective(params, embeddings, label_lower, label_upper):
         """
 
     clusters = generate_clusters(embeddings,
-                                 umap_n_neighbors = params['n_neighbors'],
-                                 umap_n_components = params['n_components'],
-                                 hdbscan_min_cluster_size = params['min_cluster_size'],
-                                 random_state = params['random_state'])
+                                 umap_n_neighbors=params['n_neighbors'],
+                                 umap_n_components=params['n_components'],
+                                 hdbscan_min_cluster_size=params['min_cluster_size'],
+                                 random_state=params['random_state'])
 
-    label_count, cost, silhouette = score_clusters(embeddings, clusters, prob_threshold = 0.05)
+    label_count, cost, silhouette = score_clusters(embeddings, clusters, prob_threshold=0.05)
 
-    #15% penalty on the cost function if outside the desired range of groups
+    # 15% penalty on the cost function if outside the desired range of groups
     if (label_count < label_lower) | (label_count > label_upper):
         penalty = 0.15
     else:
@@ -440,24 +359,25 @@ def bayesian_search(embeddings, space, label_lower, label_upper, max_evals=100):
                              label_upper=label_upper)
 
     best = fmin(fmin_objective,
-                space = space,
+                space=space,
                 algo=tpe.suggest,
                 max_evals=max_evals,
                 trials=trials)
 
     best_params = space_eval(space, best)
-    print ('best:')
-    print (best_params)
-    print (f"label count: {trials.best_trial['result']['label_count']}")
+    print('best:')
+    print(best_params)
+    print(f"label count: {trials.best_trial['result']['label_count']}")
 
     best_clusters = generate_clusters(embeddings,
-                                      umap_n_neighbors = best_params['n_neighbors'],
-                                      umap_n_components = best_params['n_components'],
-                                      hdbscan_min_cluster_size = best_params['min_cluster_size'],
-                                      random_state = best_params['random_state'])
+                                      umap_n_neighbors=best_params['n_neighbors'],
+                                      umap_n_components=best_params['n_components'],
+                                      hdbscan_min_cluster_size=best_params['min_cluster_size'],
+                                      random_state=best_params['random_state'])
 
     return best_params, best_clusters, trials
 
+
 def combine_results(df_ground, cluster_dict):
     """
     Returns dataframe of all documents and each model's assigned cluster
@@ -480,6 +400,7 @@ def combine_results(df_ground, cluster_dict):
         df_combined[key] = value.labels_
 
     return df_combined
+
 
 def summarize_results(results_dict, results_df):
     """
@@ -524,102 +445,6 @@ def summarize_results(results_dict, results_df):
 
     return df_final.sort_values(by='NMI', ascending=False)
 
-def plot_clusters(embeddings, clusters, n_neighbors=15, min_dist=0.1):
-    """
-    Reduce dimensionality of best clusters and plot in 2D
-
-    Arguments:
-        embeddings: embeddings to use
-        clusteres: HDBSCAN object of clusters
-        n_neighbors: float, UMAP hyperparameter n_neighbors
-        min_dist: float, UMAP hyperparameter min_dist for effective
-                  minimum distance between embedded points
-
-    """
-    umap_data = umap.UMAP(n_neighbors=n_neighbors,
-                          n_components=2,
-                          min_dist = min_dist,
-                          #metric='cosine',
-                          random_state=42).fit_transform(embeddings)
-
-    point_size = 100.0 / np.sqrt(len(embeddings))
-
-    result = pd.DataFrame(umap_data, columns=['x', 'y'])
-    result['labels'] = clusters.labels_
-
-    fig, ax = plt.subplots(figsize=(14, 8))
-    outliers = result[result.labels == -1]
-    clustered = result[result.labels != -1]
-    plt.scatter(outliers.x, outliers.y, color = 'lightgrey', s=point_size)
-    plt.scatter(clustered.x, clustered.y, c=clustered.labels, s=point_size, cmap='jet')
-    plt.colorbar()
-    plt.show()
-
-def combine_results(df_ground, cluster_dict):
-    """
-    Returns dataframe of all documents and each model's assigned cluster
-
-    Arguments:
-        df_ground: dataframe of original documents with associated ground truth
-                   labels
-        cluster_dict: dict, keys as column name for specific model and value as
-                      best clusters HDBSCAN object
-
-    Returns:
-        df_combined: dataframe of all documents with labels from
-                     best clusters for each model
-
-    """
-
-    df_combined = df_ground.copy()
-
-    for key, value in cluster_dict.items():
-        df_combined[key] = value.labels_
-
-    return df_combined
-
-def summarize_results(results_dict, results_df):
-    """
-    Returns a table summarizing each model's performance compared to ground
-    truth labels and the model's hyperparametes
-
-    Arguments:
-        results_dict: dict, key is the model name and value is a list of:
-                      model column name in combine_results output, best_params and best_clusters
-                      for each model (e.g. ['label_use', best_params_use, trials_use])
-        results_df: dataframe output of combine_results function; dataframe of all documents
-                    with labels from best clusters for each model
-
-    Returns:
-        df_final: dataframe with each row including a model name, calculated ARI and NMI,
-                  loss, label count, and hyperparameters of best model
-
-    """
-
-    summary = []
-
-    for key, value in results_dict.items():
-        ground_label = results_df[RISK_1_COLUMN].values
-        predicted_label = results_df[value[0]].values
-
-        ari = np.round(adjusted_rand_score(ground_label, predicted_label), 3)
-        nmi = np.round(normalized_mutual_info_score(ground_label, predicted_label), 3)
-        loss = value[2].best_trial['result']['loss']
-        label_count = value[2].best_trial['result']['label_count']
-        n_neighbors = value[1]['n_neighbors']
-        n_components = value[1]['n_components']
-        min_cluster_size = value[1]['min_cluster_size']
-        random_state = value[1]['random_state']
-
-        summary.append([key, ari, nmi, loss, label_count, n_neighbors, n_components,
-                        min_cluster_size, random_state])
-
-    df_final = pd.DataFrame(summary, columns=['Model', 'ARI', 'NMI', 'loss',
-                                              'label_count', 'n_neighbors',
-                                              'n_components', 'min_cluster_size',
-                                              'random_state'])
-
-    return df_final.sort_values(by='NMI', ascending=False)
 
 def plot_clusters(embeddings, clusters, n_neighbors=15, min_dist=0.1):
     """
@@ -635,8 +460,8 @@ def plot_clusters(embeddings, clusters, n_neighbors=15, min_dist=0.1):
     """
     umap_data = umap.UMAP(n_neighbors=n_neighbors,
                           n_components=2,
-                          min_dist = min_dist,
-                          #metric='cosine',
+                          min_dist=min_dist,
+                          # metric='cosine',
                           random_state=42).fit_transform(embeddings)
 
     point_size = 100.0 / np.sqrt(len(embeddings))
@@ -647,8 +472,7 @@ def plot_clusters(embeddings, clusters, n_neighbors=15, min_dist=0.1):
     fig, ax = plt.subplots(figsize=(14, 8))
     outliers = result[result.labels == -1]
     clustered = result[result.labels != -1]
-    plt.scatter(outliers.x, outliers.y, color = 'lightgrey', s=point_size)
+    plt.scatter(outliers.x, outliers.y, color='lightgrey', s=point_size)
     plt.scatter(clustered.x, clustered.y, c=clustered.labels, s=point_size, cmap='jet')
     plt.colorbar()
     plt.show()
-
